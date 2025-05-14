@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DES File Encryptor/Decryptor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body {
+            background-color: #F1E8D9;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+        }
+        h2 {
+            color: #EFB0C9;
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        label {
+            display: block;
+            margin-top: 20px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="file"], input[type="password"], input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            margin-top: 8px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        .checkbox-container {
+            margin: 15px 0;
+            display: flex;
+            align-items: center;
+        }
+        .checkbox-container input[type="checkbox"] {
+            margin-right: 10px;
+        }
+        .buttons {
+            margin-top: 30px;
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+        }
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            background-color: #EFB0C9;
+            color: #000;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #f499bc;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .progress {
+            margin-top: 15px;
+            width: 100%;
+            background-color: #f3f3f3;
+            border-radius: 5px;
+            display: none;
+        }
+        .progress-bar {
+            height: 20px;
+            border-radius: 5px;
+            background-color: #EFB0C9;
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🔐 DES File Encryptor/Decryptor</h2>
+        <form id="cryptoForm">
+            <label for="fileInput">📁 Bước 1: Chọn file</label>
+            <input type="file" id="fileInput" required>
+
+            <label for="keyInput">🔑 Bước 2: Nhập key (8 ký tự trở lên)</label>
+            <input type="password" id="keyInput" minlength="8" required>
+
+            <div class="checkbox-container">
+                <input type="checkbox" id="showKey" onclick="toggleKeyVisibility()">
+                <label for="showKey" style="margin-top: 0; font-weight: normal;">Hiển thị key</label>
+            </div>
+
+            <div class="progress" id="progressContainer">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+
+            <div class="buttons">
+                <button type="button" id="encryptBtn" onclick="processFile('encrypt')">🔐 Mã hóa</button>
+                <button type="button" id="decryptBtn" onclick="processFile('decrypt')">🔓 Giải mã</button>
+            </div>
+        </form>
+
+        <div id="statusMessage" class="status"></div>
+    </div>
+
+    <script>
+        function toggleKeyVisibility() {
+            const keyInput = document.getElementById("keyInput");
+            keyInput.type = document.getElementById("showKey").checked ? "text" : "password";
+        }
+
+        function showStatus(message, isSuccess) {
+            const statusElement = document.getElementById("statusMessage");
+            statusElement.textContent = message;
+            statusElement.className = "status " + (isSuccess ? "success" : "error");
+            statusElement.style.display = "block";
+            setTimeout(() => {
+                statusElement.style.display = "none";
+            }, 5000);
+        }
+
+        function updateProgress(percent) {
+            const progressContainer = document.getElementById("progressContainer");
+            const progressBar = document.getElementById("progressBar");
+            progressContainer.style.display = "block";
+            progressBar.style.width = percent + "%";
+            if (percent >= 100) {
+                setTimeout(() => {
+                    progressContainer.style.display = "none";
+                    progressBar.style.width = "0%";
+                }, 500);
+            }
+        }
+
+        function processFile(action) {
+            const fileInput = document.getElementById("fileInput");
+            const keyInput = document.getElementById("keyInput");
+            const encryptBtn = document.getElementById("encryptBtn");
+            const decryptBtn = document.getElementById("decryptBtn");
+
+            if (!fileInput.files.length) {
+                showStatus("Vui lòng chọn file!", false);
+                return;
+            }
+            if (keyInput.value.length < 8) {
+                showStatus("Key phải có ít nhất 8 ký tự!", false);
+                return;
+            }
+
+            encryptBtn.disabled = true;
+            decryptBtn.disabled = true;
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function (e) {
+                try {
+                    updateProgress(30);
+                    const key = CryptoJS.enc.Utf8.parse(keyInput.value);
+
+                    let resultBlob, fileName = file.name;
+
+                    if (action === 'encrypt') {
+                        const iv = CryptoJS.lib.WordArray.random(8);
+                        const wordArray = CryptoJS.lib.WordArray.create(e.target.result);
+
+                        const encrypted = CryptoJS.DES.encrypt(wordArray, key, {
+                            iv: iv,
+                            mode: CryptoJS.mode.CBC,
+                            padding: CryptoJS.pad.Pkcs7
+                        });
+
+                        const combined = iv.concat(encrypted.ciphertext);
+                        const uint8Array = new Uint8Array(combined.words.length * 4);
+                        for (let i = 0; i < combined.words.length; i++) {
+                            uint8Array.set([
+                                (combined.words[i] >> 24) & 0xff,
+                                (combined.words[i] >> 16) & 0xff,
+                                (combined.words[i] >> 8) & 0xff,
+                                combined.words[i] & 0xff
+                            ], i * 4);
+                        }
+
+                        resultBlob = new Blob([uint8Array], { type: "application/octet-stream" });
+                        fileName += ".enc";
+                    } else {
+                        if (!file.name.endsWith(".enc")) throw new Error("File phải có phần mở rộng .enc");
+
+                        const bytes = new Uint8Array(e.target.result);
+
+                        const ivWords = [];
+                        for (let i = 0; i < 8; i += 4) {
+                            ivWords.push(
+                                (bytes[i] << 24) | (bytes[i + 1] << 16) | (bytes[i + 2] << 8) | bytes[i + 3]
+                            );
+                        }
+                        const iv = CryptoJS.lib.WordArray.create(ivWords, 8);
+
+                        const cipherWords = [];
+                        for (let i = 8; i < bytes.length; i += 4) {
+                            cipherWords.push(
+                                (bytes[i] << 24) | (bytes[i + 1] << 16) | (bytes[i + 2] << 8) | bytes[i + 3]
+                            );
+                        }
+                        const ciphertext = CryptoJS.lib.WordArray.create(cipherWords, bytes.length - 8);
+
+                        const decrypted = CryptoJS.DES.decrypt({ ciphertext }, key, {
+                            iv: iv,
+                            mode: CryptoJS.mode.CBC,
+                            padding: CryptoJS.pad.Pkcs7
+                        });
+
+                        const decryptedBytes = new Uint8Array(decrypted.sigBytes);
+                        for (let i = 0; i < decrypted.sigBytes; i++) {
+                            decryptedBytes[i] = (decrypted.words[Math.floor(i / 4)] >> (24 - (i % 4) * 8)) & 0xff;
+                        }
+
+                        resultBlob = new Blob([decryptedBytes], { type: "application/octet-stream" });
+                        fileName = fileName.replace(".enc", "");
+                    }
+
+                    updateProgress(70);
+
+                    const url = URL.createObjectURL(resultBlob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+
+                    updateProgress(100);
+                    showStatus(`Đã ${action === 'encrypt' ? 'mã hóa' : 'giải mã'} file thành công!`, true);
+                } catch (err) {
+                    showStatus("Lỗi: " + err.message, false);
+                    console.error(err);
+                } finally {
+                    encryptBtn.disabled = false;
+                    decryptBtn.disabled = false;
+                }
+            };
+
+            reader.onerror = () => {
+                showStatus("Không thể đọc file!", false);
+                encryptBtn.disabled = false;
+                decryptBtn.disabled = false;
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+    </script>
+</body>
+</html>
